@@ -87,7 +87,7 @@ function payoffMonths(balance,rate,payment){if(!balance||!payment||payment<=0)re
 function daysUntilDue(dueDay){if(!dueDay)return null;const now=new Date(),target=new Date(now.getFullYear(),now.getMonth(),dueDay);if(target<now)target.setMonth(target.getMonth()+1);return Math.ceil((target-now)/86400000);}
 function getDaysInMonth(ym){const[y,m]=ym.split("-");return new Date(y,m,0).getDate();}
 function getFirstDOW(ym){const[y,m]=ym.split("-");return new Date(y,m-1,1).getDay();}
-const blankForm=()=>({name:"",category:"Credit Card",holder:"Joint",balance:"",minPayment:"",monthlyPayment:"",dueDate:"",interestRate:"",accountNumber:"",autopay:false,website:"",username:"",password:"",phone:"",notes:""});
+const blankForm=()=>({name:"",category:"Credit Card",holder:"Joint",balance:"",minPayment:"",monthlyPayment:"",dueDate:"",interestRate:"",accountNumber:"",autopay:false,isAnnual:false,renewalMonth:"",website:"",username:"",password:"",phone:"",notes:""});
 
 const C={bg:"#0e1a14",bg2:"#122018",panel:"rgba(255,255,255,0.04)",border:"rgba(255,255,255,0.08)",borderGold:"rgba(201,168,76,0.4)",gold:"#c9a84c",green:"#5db87a",greenDim:"rgba(93,184,122,0.12)",red:"#e07070",redDim:"rgba(224,112,112,0.12)",blue:"#6aafd6",blueDim:"rgba(106,175,214,0.12)",purple:"#b07fc4",text:"#dfeae3",textDim:"#6b8878"};
 
@@ -180,6 +180,7 @@ function App(){
   const[payNote,setPayNote]=useState("");
   const[calMonth,setCalMonth]=useState(getCurrentMonth);
   const[annualYear,setAnnualYear]=useState(new Date().getFullYear());
+  const[search,setSearch]=useState("");
 
   useEffect(()=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(accounts));}catch{}},[accounts]);
 
@@ -200,8 +201,8 @@ function App(){
   },[]);
 
   const months=surroundingMonths();
-  function saveAccount(){if(!form.name.trim())return;if(editId!==null){setAccounts(p=>p.map(a=>a.id===editId?{...a,...form}:a));setEditId(null);}else{setAccounts(p=>[...p,{...form,id:Date.now(),payments:[]}]);}setForm(blankForm());setShowForm(false);}
-  function startEdit(a){setForm({name:a.name,category:a.category,holder:a.holder||"Joint",balance:a.balance,minPayment:a.minPayment||"",monthlyPayment:a.monthlyPayment,dueDate:a.dueDate,interestRate:a.interestRate,accountNumber:a.accountNumber||"",autopay:!!a.autopay,website:a.website,username:a.username,password:a.password,phone:a.phone||"",notes:a.notes});setEditId(a.id);setShowForm(true);setTab("accounts");window.scrollTo({top:0,behavior:"smooth"});}
+  function saveAccount(){if(!form.name.trim())return;const finalForm={...form,renewalMonth:form.isAnnual?(parseInt(form.renewalMonth)||undefined):undefined,monthlyPayment:form.isAnnual?"":form.monthlyPayment};if(editId!==null){setAccounts(p=>p.map(a=>a.id===editId?{...a,...finalForm}:a));setEditId(null);}else{setAccounts(p=>[...p,{...finalForm,id:Date.now(),payments:[]}]);}setForm(blankForm());setShowForm(false);}
+  function startEdit(a){setForm({name:a.name,category:a.category,holder:a.holder||"Joint",balance:a.balance,minPayment:a.minPayment||"",monthlyPayment:a.monthlyPayment,dueDate:a.dueDate,interestRate:a.interestRate,accountNumber:a.accountNumber||"",autopay:!!a.autopay,isAnnual:!!a.renewalMonth,renewalMonth:a.renewalMonth||"",website:a.website,username:a.username,password:a.password,phone:a.phone||"",notes:a.notes});setEditId(a.id);setShowForm(true);setTab("accounts");window.scrollTo({top:0,behavior:"smooth"});}
   function deleteAccount(id){if(window.confirm("Remove this account permanently?"))setAccounts(p=>p.filter(a=>a.id!==id));}
   function setF(k,v){setForm(f=>({...f,[k]:v}));}
   function getMP(a,m){return(a.payments||[]).filter(p=>p.month===m);}
@@ -212,6 +213,17 @@ function App(){
   function updateBalance(id,val){setAccounts(p=>p.map(a=>a.id===id?{...a,balance:val}:a));}
 
   const billable=accounts.filter(a=>parseFloat(a.monthlyPayment)>0);
+  const sortedAccounts=[...accounts].sort((a,b)=>{
+    const da=parseInt(a.dueDate)||999;
+    const db=parseInt(b.dueDate)||999;
+    return da-db;
+  });
+  const filteredAccounts=search.trim()===""?[...accounts]:[...accounts].filter(a=>
+    a.name.toLowerCase().includes(search.toLowerCase())||
+    a.category.toLowerCase().includes(search.toLowerCase())||
+    (a.holder||"").toLowerCase().includes(search.toLowerCase())||
+    (a.notes||"").toLowerCase().includes(search.toLowerCase())
+  );
   const totalDue=billable.reduce((s,a)=>s+(parseFloat(a.monthlyPayment)||0),0);
   const totalPaid=billable.reduce((s,a)=>s+getPaid(a,month),0);
   const totalRemaining=Math.max(0,totalDue-totalPaid);
@@ -380,13 +392,13 @@ function App(){
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse"}}>
                   <thead><tr style={{background:"rgba(0,0,0,0.25)"}}>
-                    {["Account","Holder","Balance","Rate","Min","Monthly Due","Due Date","Paid","Status",""].map(h=>(
+                    {["Account","Holder","Balance","Rate","Min","Monthly / Annual","Due Date","Paid","Status",""].map(h=>(
                       <th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:10,textTransform:"uppercase",letterSpacing:.9,color:C.textDim,fontWeight:600,whiteSpace:"nowrap"}}>{h}</th>
                     ))}
                   </tr></thead>
                   <tbody>
-                    {accounts.map((a,idx)=>{
-                      const paid=getPaid(a,month);const due=parseFloat(a.monthlyPayment)||0;const full=isFullPaid(a,month);const days=daysUntilDue(a.dueDate);const infoOnly=!due;
+                    {sortedAccounts.map((a,idx)=>{
+                      const paid=getPaid(a,month);const due=parseFloat(a.monthlyPayment)||0;const full=isFullPaid(a,month);const days=daysUntilDue(a.dueDate);const infoOnly=!due&&!a.renewalMonth;
                       return(<tr key={a.id} className="rh" style={{borderBottom:`1px solid ${C.border}`,opacity:infoOnly?.7:1,background:full?"rgba(93,184,122,0.04)":infoOnly?"rgba(106,175,214,0.03)":idx%2===0?"rgba(0,0,0,0.08)":"transparent"}}>
                         <td style={{padding:"11px 12px",fontWeight:600,color:C.text,whiteSpace:"nowrap"}}>
                           {a.name}
@@ -397,7 +409,7 @@ function App(){
                         <td style={{padding:"11px 12px",color:C.red,fontWeight:700}}>{fmt(a.balance)}</td>
                         <td style={{padding:"11px 12px",color:C.purple}}>{a.interestRate?`${a.interestRate}%`:"—"}</td>
                         <td style={{padding:"11px 12px",color:C.textDim,fontSize:13}}>{a.minPayment?fmt(a.minPayment):"—"}</td>
-                        <td style={{padding:"11px 12px",color:infoOnly?C.textDim:C.gold,fontWeight:700}}>{infoOnly?(a.renewalMonth?"Annual":"(escrow)"):fmt(due)}</td>
+                        <td style={{padding:"11px 12px",color:a.renewalMonth?C.purple:infoOnly?C.textDim:C.gold,fontWeight:700}}>{a.renewalMonth?<span><Badge color={C.purple} bg="rgba(176,127,196,0.15)">Annual</Badge></span>:infoOnly?"(escrow)":fmt(due)}</td>
                         <td style={{padding:"11px 12px",color:C.textDim,whiteSpace:"nowrap"}}>{a.dueDate?ordinal(a.dueDate):"—"}{a.dueDate&&!full&&days!==null&&days<=7&&<span style={{marginLeft:4,fontSize:10,color:days<=3?C.red:C.gold}}>{days}d</span>}</td>
                         <td style={{padding:"11px 12px",color:C.green,fontWeight:600}}>{paid?fmt(paid):"—"}</td>
                         <td style={{padding:"11px 12px"}}>{infoOnly?<Badge color={C.blue} bg={C.blueDim}>Escrow</Badge>:full?<Badge color={C.green} bg={C.greenDim}>✓ PAID</Badge>:paid>0?<Badge color={C.gold} bg="rgba(201,168,76,0.12)">Partial</Badge>:<Badge color={C.red} bg={C.redDim}>Pending</Badge>}</td>
@@ -421,10 +433,16 @@ function App(){
         {/* ══ ACCOUNTS ══ */}
         {tab==="accounts"&&(
           <div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
               <div style={{fontFamily:"Georgia,serif",fontSize:18,color:C.gold}}>All Accounts</div>
               <Btn onClick={()=>{setForm(blankForm());setEditId(null);setShowForm(true);}}>+ Add Account</Btn>
             </div>
+            <div style={{position:"relative",marginBottom:16}}>
+              <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,color:C.textDim}}>🔍</span>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search accounts by name, category, holder or notes..." style={{width:"100%",background:"rgba(0,0,0,0.3)",border:`1px solid ${search?C.gold:C.border}`,color:C.text,padding:"10px 14px 10px 36px",borderRadius:10,fontSize:14,outline:"none",transition:"border-color .2s"}}/>
+              {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:C.textDim,cursor:"pointer",fontSize:16}}>✕</button>}
+            </div>
+            {search&&<div style={{fontSize:12,color:C.textDim,marginBottom:12}}>{filteredAccounts.length} result{filteredAccounts.length!==1?"s":""} for "{search}"</div>}
             {showForm&&(
               <div style={{background:"rgba(0,0,0,0.25)",border:`1px solid ${C.borderGold}`,borderRadius:16,padding:22,marginBottom:20}}>
                 <div style={{fontFamily:"Georgia,serif",fontSize:16,color:C.gold,marginBottom:14}}>{editId?"Edit Account":"New Account"}</div>
@@ -434,8 +452,8 @@ function App(){
                   <FLabel label="Holder"><Sel value={form.holder} onChange={v=>setF("holder",v)} options={HOLDERS}/></FLabel>
                   <FLabel label="Balance ($)"><Inp type="number" value={form.balance} onChange={v=>setF("balance",v)} placeholder="0.00"/></FLabel>
                   <FLabel label="Min Payment ($)"><Inp type="number" value={form.minPayment} onChange={v=>setF("minPayment",v)} placeholder="0.00"/></FLabel>
-                  <FLabel label="Monthly Payment ($)"><Inp type="number" value={form.monthlyPayment} onChange={v=>setF("monthlyPayment",v)} placeholder="0.00"/></FLabel>
-                  <FLabel label="Due Date (day)"><Inp type="number" value={form.dueDate} onChange={v=>setF("dueDate",v)} placeholder="15"/></FLabel>
+                  <FLabel label={form.isAnnual?"Annual Payment Amount ($)":"Monthly Payment ($)"}><Inp type="number" value={form.monthlyPayment} onChange={v=>setF("monthlyPayment",v)} placeholder="0.00"/></FLabel>
+                  <FLabel label={form.isAnnual?"Due Day of Month":"Due Date (day)"}><Inp type="number" value={form.dueDate} onChange={v=>setF("dueDate",v)} placeholder={form.isAnnual?"1":"15"}/></FLabel>
                   <FLabel label="Interest Rate (%)"><Inp type="number" value={form.interestRate} onChange={v=>setF("interestRate",v)} placeholder="19.99"/></FLabel>
                   <FLabel label="Account Number"><Inp value={form.accountNumber} onChange={v=>setF("accountNumber",v)} placeholder="last 4 digits"/></FLabel>
                   <FLabel label="Website"><Inp value={form.website} onChange={v=>setF("website",v)} placeholder="https://..."/></FLabel>
@@ -443,6 +461,15 @@ function App(){
                   <FLabel label="Password"><Inp type="password" value={form.password} onChange={v=>setF("password",v)} placeholder="••••••••"/></FLabel>
                   <FLabel label="Phone"><Inp value={form.phone} onChange={v=>setF("phone",v)} placeholder="1-800-..."/></FLabel>
                   <FLabel label="Notes"><textarea value={form.notes} onChange={e=>setF("notes",e.target.value)} rows={2} placeholder="Extra notes..." style={{width:"100%",background:"rgba(0,0,0,0.3)",border:`1px solid ${C.border}`,color:C.text,padding:"9px 13px",borderRadius:8,fontSize:14,resize:"vertical"}}/></FLabel>
+                  <FLabel label="Payment Frequency">
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginTop:6}}>
+                      <div onClick={()=>setF("isAnnual",!form.isAnnual)} style={{width:40,height:21,borderRadius:11,cursor:"pointer",background:form.isAnnual?C.purple:"rgba(255,255,255,0.1)",position:"relative",transition:"background .2s"}}>
+                        <div style={{position:"absolute",top:2,left:form.isAnnual?21:2,width:17,height:17,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 4px rgba(0,0,0,0.4)"}}/>
+                      </div>
+                      <span style={{fontSize:13,color:form.isAnnual?C.purple:C.textDim}}>{form.isAnnual?"Annual payment":"Monthly payment"}</span>
+                    </div>
+                  </FLabel>
+                  {form.isAnnual&&<FLabel label="Renewal Month (1-12)"><Inp type="number" value={form.renewalMonth} onChange={v=>setF("renewalMonth",v)} placeholder="e.g. 4 for April"/></FLabel>}
                   <FLabel label="Autopay">
                     <div style={{display:"flex",alignItems:"center",gap:10,marginTop:6}}>
                       <div onClick={()=>setF("autopay",!form.autopay)} style={{width:40,height:21,borderRadius:11,cursor:"pointer",background:form.autopay?C.green:"rgba(255,255,255,0.1)",position:"relative",transition:"background .2s"}}>
@@ -459,8 +486,8 @@ function App(){
               </div>
             )}
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:14}}>
-              {accounts.map(a=>{
-                const paid=getPaid(a,month);const due=parseFloat(a.monthlyPayment)||0;const infoOnly=!due;
+              {filteredAccounts.map(a=>{
+                const paid=getPaid(a,month);const due=parseFloat(a.monthlyPayment)||0;const infoOnly=!due&&!a.renewalMonth;
                 const mo=payoffMonths(parseFloat(a.balance),parseFloat(a.interestRate),parseFloat(a.monthlyPayment));
                 const isExp=expanded[a.id];const pwVis=showPw[a.id];
                 return(<div key={a.id} style={{background:C.panel,border:`1px solid ${infoOnly?"rgba(106,175,214,0.2)":C.border}`,borderRadius:16,padding:18,transition:"box-shadow .2s",opacity:infoOnly?.85:1}} onMouseEnter={e=>e.currentTarget.style.boxShadow="0 6px 28px rgba(0,0,0,0.35)"} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
