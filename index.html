@@ -226,6 +226,90 @@ function App(){
     w.document.close();w.print();
   }
 
+  function exportCalendar(){
+    const MONTH_NAMES=["","January","February","March","April","May","June","July","August","September","October","November","December"];
+    const now=new Date();
+    const yr=now.getFullYear();
+    function pad(n){return String(n).padStart(2,"0");}
+    function icsDate(y,m,d){return y+pad(m)+pad(d);}
+    function icsDateTime(date){
+      return date.getFullYear()+pad(date.getMonth()+1)+pad(date.getDate())+"T"+pad(date.getHours())+pad(date.getMinutes())+pad(date.getSeconds());
+    }
+    const stamp=icsDateTime(now)+"Z";
+    let events=[];
+
+    accounts.forEach(a=>{
+      // Monthly bills with a due date
+      if(a.dueDate&&parseFloat(a.monthlyPayment)>0){
+        const day=parseInt(a.dueDate);
+        const amt=parseFloat(a.monthlyPayment);
+        const dtstart=`${yr}${pad(now.getMonth()+1)}${pad(day)}`;
+        const uid=`monthly-${a.id}@vallier-finance`;
+        events.push([
+          "BEGIN:VEVENT",
+          `UID:${uid}`,
+          `DTSTAMP:${stamp}`,
+          `DTSTART;VALUE=DATE:${dtstart}`,
+          `DTEND;VALUE=DATE:${dtstart}`,
+          `SUMMARY:💳 ${a.name} — $${amt.toFixed(2)} due`,
+          `DESCRIPTION:${a.name}\nAmount: $${amt.toFixed(2)}\nHolder: ${a.holder||"Joint"}\nCategory: ${a.category}${a.phone?"\nPhone: "+a.phone:""}${a.website?"\nWebsite: "+a.website:""}`,
+          "RRULE:FREQ=MONTHLY;BYMONTHDAY="+day,
+          "BEGIN:VALARM",
+          "TRIGGER:-P2D",
+          "ACTION:DISPLAY",
+          `DESCRIPTION:${a.name} payment of $${amt.toFixed(2)} is due in 2 days`,
+          "END:VALARM",
+          "END:VEVENT"
+        ].join("\r\n"));
+      }
+      // Annual subscriptions
+      if(a.renewalMonth&&!parseFloat(a.monthlyPayment)){
+        const m2=a.notes.match(/\$([0-9,\.]+)\/yr/);
+        const amtStr=m2?"$"+m2[1]:"";
+        const dtstart=`${yr}${pad(a.renewalMonth)}01`;
+        const uid=`annual-${a.id}@vallier-finance`;
+        events.push([
+          "BEGIN:VEVENT",
+          `UID:${uid}`,
+          `DTSTAMP:${stamp}`,
+          `DTSTART;VALUE=DATE:${dtstart}`,
+          `DTEND;VALUE=DATE:${dtstart}`,
+          `SUMMARY:📅 ${a.name} Annual Renewal${amtStr?" — "+amtStr:""}`,
+          `DESCRIPTION:${a.name} annual renewal${amtStr?" — "+amtStr:""}\nHolder: ${a.holder||"Joint"}\nRenews: ${MONTH_NAMES[a.renewalMonth]}`,
+          "RRULE:FREQ=YEARLY;BYMONTH="+a.renewalMonth+";BYMONTHDAY=1",
+          "BEGIN:VALARM",
+          "TRIGGER:-P14D",
+          "ACTION:DISPLAY",
+          `DESCRIPTION:${a.name} annual renewal coming up in 2 weeks${amtStr?" — "+amtStr:""}`,
+          "END:VALARM",
+          "END:VEVENT"
+        ].join("\r\n"));
+      }
+    });
+
+    const ics=[
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Vallier Family Finance Ledger//EN",
+      "CALSCALE:GREGORIAN",
+      "METHOD:PUBLISH",
+      "X-WR-CALNAME:Vallier Bill Reminders",
+      "X-WR-TIMEZONE:America/Los_Angeles",
+      ...events,
+      "END:VCALENDAR"
+    ].join("\r\n");
+
+    const blob=new Blob([ics],{type:"text/calendar;charset=utf-8"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download="Vallier_Bill_Reminders.ics";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   const calDays=getDaysInMonth(calMonth);
   const calOffset=getFirstDOW(calMonth);
   const TABS=[["dashboard","📊 Dashboard"],["accounts","🗂 Accounts"],["calendar","📅 Calendar"],["history","📋 History"],["annual","📈 Annual"],["hawaii","🌺 Hawaii Rentals"]];
@@ -243,6 +327,7 @@ function App(){
             {months.map(m=><option key={m} value={m} style={{background:C.bg2}}>{monthLabel(m)}</option>)}
           </select>
           <Btn onClick={printSummary} variant="ghost" small>🖨 Print</Btn>
+          <Btn onClick={exportCalendar} variant="ghost" small>📅 Export Calendar</Btn>
           <Btn onClick={()=>{localStorage.removeItem(PIN_STORAGE_KEY);window.location.reload();}} variant="ghost" small>🔒 Lock</Btn>
         </div>
       </div>
