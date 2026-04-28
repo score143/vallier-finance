@@ -6,7 +6,7 @@
 <title>Vallier Family Finance Ledger</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.22.20/babel.min.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:#0e1a14;font-family:'Segoe UI',Arial,sans-serif;color:#dfeae3;min-height:100vh}
@@ -17,7 +17,7 @@
 </head>
 <body>
 <div id="root"></div>
-<script type="text/babel">
+<script type="text/babel" data-presets="react,env">
 const{useState,useEffect}=React;
 
 // ── PIN CONFIG ──────────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ function PinScreen({onUnlock}){
       <div style={{background:C.panel,border:`1px solid ${C.borderGold}`,borderRadius:20,padding:"32px 40px",width:280,textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}>
         <div style={{display:"flex",justifyContent:"center",gap:12,marginBottom:28,animation:shake?"shake 0.4s":"none"}}>
           {Array.from({length:CORRECT_PIN.length}).map((_,i)=>(
-            <div key={i} style={{width:16,height:16,borderRadius:"50%",background:i<pin.length?C.gold:"rgba(255,255,255,0.15)",border:`2px solid ${i<pin.length?C.gold:"rgba(255,255,255,0.2)}`,transition:"all .15s"}}/>
+            <div key={i} style={{width:16,height:16,borderRadius:"50%",background:i<pin.length?C.gold:"rgba(255,255,255,0.15)",border:"2px solid "+(i<pin.length?C.gold:"rgba(255,255,255,0.2)"),transition:"all .15s"}}/>
           ))}
         </div>
         {error&&<div style={{color:C.red,fontSize:13,marginBottom:12}}>Incorrect PIN — try again</div>}
